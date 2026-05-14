@@ -183,63 +183,77 @@ faulty Class-B parameters ever execute.
 | `AutoProgram 0` | Reopens target, programs `a0 20`-blocks, verifies `a0 21`-blocks | v3.02's open-target dance is broken on a brick |
 | `Report_Message` | Same log content as v1.05 GUI report pane | Diagnostics only |
 
-## 6. Wrapping in a PowerShell script
+## 6. The batch file — `C:\Elprotronic\flash-imd111t.bat`
 
-`flash-imd111t.ps1`:
+**Always use this rather than hand-typing client commands.** The `-m` flag
+concatenates everything after it *on the same line*; if the file-path argument
+wraps onto a second prompt line, the server receives a bare command with no
+argument and returns an error (observed: `ConfigFileLoad` with no path →
+`RETURN: 535`). A batch file eliminates that class of mistake entirely.
 
-```powershell
-param(
-    [Parameter(Mandatory)][string]$Cfg,
-    [Parameter(Mandatory)][string]$Ldf,
-    [switch]$MassErase
-)
+Prerequisite — server already running in its own window:
 
-$ErrorActionPreference = 'Stop'
-$bin = "C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64"
-$client = Join-Path $bin "CommandLine-Client.exe"
-
-function Step {
-    param([string[]]$Args)
-    & $client -i 1 -m @Args
-    if ($LASTEXITCODE -ne 0) { throw "step failed: $($Args -join ' ') (rc=$LASTEXITCODE)" }
-}
-
-Step ConfigFileLoad $Cfg
-Step ReadCodeFile  $Ldf
-if ($MassErase) { Step Memory_Erase 0 }
-Step AutoProgram 0
-Step Report_Message
+```
+cd "C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64"
+Generic-CommandLine-Server.exe FPAs-setup.ini -b
 ```
 
-Usage:
+Then, in any other `cmd` window:
 
-```powershell
-.\flash-imd111t.ps1 -Cfg C:\Users\Sandhya\Desktop\MCE11.CFG `
-                    -Ldf "C:\...\Not_Working_ClassB_enabled_I2Cdisable.ldf" `
-                    -MassErase
+```
+C:\Elprotronic\flash-imd111t.bat classb-en
+C:\Elprotronic\flash-imd111t.bat working
+C:\Elprotronic\flash-imd111t.bat recover
+C:\Elprotronic\flash-imd111t.bat "C:\path\to\some.ldf"
 ```
 
-## 7. Error handling
+| Argument | Action |
+|---|---|
+| `classb-en` | Program `Not_Working_ClassB_enabled_I2Cdisable.ldf` — the file the v3.02 GUI fails on. No mass-erase. |
+| `working` | Mass-erase, then program `Working_ClassB_disabled_I2Cdisable.ldf` — recovers comms on a bricked chip. |
+| `recover` | Mass-erase, program firmware `V5.03.00`, then program Working params — full recovery. |
+| `"<path.ldf>"` | Program an arbitrary `.ldf` as-is (cfg loaded, no erase). |
 
-`CommandLine-Client.exe` returns the server's status code. Non-zero on
-`AutoProgram` against a freshly bricked chip can happen if USB scheduling drifts
-through the catch-at-startup window — retry sequence:
+The `.ldf` files were copied out of the space-laden `Downloads\IMD111T Demo test
+files\...` path into `C:\Elprotronic\imd111t-ldf\` so no path needs quoting
+gymnastics. The cfg path (`C:\Users\Sandhya\Desktop\MCE11.CFG`) and FPA index
+(`1`) are baked into the batch file — edit the `set` lines at the top to change.
 
-```powershell
-Step Memory_Erase 0
-Step AutoProgram 0
+## 7. Reading the result — exit codes vs. RETURN codes
+
+**`CommandLine-Client.exe` does NOT propagate the programming result.** Per
+`Pipe-Client.cpp`, the client returns `0` on any successful pipe round-trip and
+`-1` only on a pipe failure (server not running). It does **not** return the
+server's status. So `errorlevel` / `$LASTEXITCODE` only tells you "did the
+client reach the server", never "did programming pass".
+
+The authoritative result is the server's `RETURN:` line, printed to stdout by
+both the server console and the client:
+
+```
+[14/May/2026:10:43:46] (1) RETURN: 1     <- step PASSED
+[14/May/2026:10:43:46] (1) RETURN: 535   <- step FAILED (here: no/invalid cfg file)
 ```
 
-If that still fails:
+`RETURN: 1` = pass. Any other value on `ConfigFileLoad` / `ReadCodeFile` /
+`AutoProgram` / `Memory_Erase` is a failure — read the `INFO:` / `ERROR:` lines
+around it, and run `Report_Message` for the full GUI-style log.
 
-1. Check `Console A` log — does the server show "FPA opened" with the right serial?
-2. Verify Vcc with a meter on the test points — the FPA should be sourcing power
-   per `PowerFromFpaEn 1` in the cfg.
-3. Increase `PowerCycleVccOff` to `500` (ms) in the cfg, reload via
-   `ConfigFileLoad`, retry. Longer Vcc-off ensures rail collapses below SBSL
-   reset threshold.
+Because the result isn't a process exit code, automation (Phase 4) must **parse
+the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 
-## 8. Source references (all on this machine)
+## 8. Troubleshooting
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| `RETURN: 535` on `ConfigFileLoad` | Command sent with no path (line wrapped) | Use the batch file; never hand-type |
+| Client prints `Could not open pipe` | Server not running | Start `Generic-CommandLine-Server.exe FPAs-setup.ini -b` first |
+| `INIT: Found 0 adapters` | Wrong serial in `FPAs-setup.ini`, or adapter unplugged | Confirm serial `20220147`, replug USB |
+| `AutoProgram` fails on a freshly bricked chip | USB scheduling drifted through the catch-at-startup window | Re-run: `flash-imd111t.bat working` (it mass-erases first) |
+| `AutoProgram` still fails after retry | Vcc not collapsing below SBSL reset threshold | Re-export cfg with `PowerCycleVccOff` raised to `500` ms |
+| Server blocks on a dialog | `PromptForPowerCycle 1` triggered (only if FPA not powering target) | Re-export cfg with `PromptForPowerCycle 0` |
+
+## 9. Source references (all on this machine)
 
 - `C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64\README.txt` — confirms bundled v1.04 iMOTION API DLL
 - `C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64\sequence.txt` — canonical command sequence
@@ -251,7 +265,7 @@ If that still fails:
 - `C:\Program Files (x86)\Elprotronic\FP-GP-X (x86)\History-X.txt` — confirms v3.02 release dates
 - Elprotronic wiki Getting-Started: <https://elprotronic.atlassian.net/wiki/spaces/FPGPARM/pages/36962323/Generic+DLL+CLI+Getting+Started>
 
-## 9. Status
+## 10. Status
 
 | Item | State |
 |---|---|
@@ -259,6 +273,9 @@ If that still fails:
 | v1.04 iMOTION API DLL in `bin\x64` | confirmed (May 13 2024, 16 MB) |
 | `FPAs-setup.ini` populated with FPA serial `20220147` | **done** |
 | Working `.cfg` (`C:\Users\Sandhya\Desktop\MCE11.CFG`) | **done — verified IMD111T-6F040, UART, FPA-powered** |
-| DLL `VersionInfo` check (§3.4) | pending — quick PowerShell one-liner |
-| Phase 3 manual test (Working → Not_Working → Working) | pending — needs bench session |
-| Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending |
+| Server starts, finds adapter | **done — `SN=20220147`, `HW PN=XStream-I-1.1`, Full Access** |
+| `.ldf` files copied to `C:\Elprotronic\imd111t-ldf\` | **done** |
+| `flash-imd111t.bat` written to `C:\Elprotronic\` | **done** |
+| DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
+| Phase 3 manual test (`flash-imd111t.bat classb-en`) | pending — needs bench session |
+| Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
