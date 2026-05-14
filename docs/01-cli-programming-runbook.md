@@ -77,8 +77,18 @@ XStream-Iso adapter serial: **`20220147`**.
 single line (stale `TYPE-MSP` / `TYPE-ARM` lines removed):
 
 ```
-FPA-1 20220147 TYPE-iMOTION
+FPA-1 20220147 TYPE-IMOTION
 ```
+
+> **The `TYPE-` token is case-sensitive and must be exactly `IMOTION`.**
+> `Generic-FPA.h:117` defines `IMOTION_DLL_TYPE = "IMOTION"`. The full token
+> table (`Generic-FPA.h:108-118`) is: `C2000`, `CC`, `CC-GP`, `ARM`, `ARM-GP`,
+> `MSP`, `MSP-GP`, `M`, `M-GP`, `IMOTION`, `IMOTION-GP` — all uppercase.
+> A mistyped token (`TYPE-iMOTION`) does **not** fail loudly: the server still
+> starts and opens the adapter, but falls back to the **ARM** DLL, which has
+> `COMM_UART` disabled (`comm_definitions.h:16` — `//not supported a.t.m.`).
+> `AutoProgram` then dies with *"Selected communication is not supported"*
+> because the cfg's `Interface 514` = `COMM_UART | COMM_FAST`. Use `IMOTION`.
 
 ### 3.3 Working `.cfg` — DONE
 
@@ -246,6 +256,7 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 
 | Symptom | Cause | Fix |
 |---|---|---|
+| `AutoProgram` → *"Selected communication is not supported"* | `FPAs-setup.ini` token mistyped — server fell back to the ARM DLL, which has `COMM_UART` disabled | Token must be exactly `TYPE-IMOTION` (uppercase). Fix the `.ini`, restart the server |
 | `RETURN: 535` on `ConfigFileLoad` | Command sent with no path (line wrapped) | Use the batch file; never hand-type |
 | Client prints `Could not open pipe` | Server not running | Start `Generic-CommandLine-Server.exe FPAs-setup.ini -b` first |
 | `INIT: Found 0 adapters` | Wrong serial in `FPAs-setup.ini`, or adapter unplugged | Confirm serial `20220147`, replug USB |
@@ -276,6 +287,7 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 | Server starts, finds adapter | **done — `SN=20220147`, `HW PN=XStream-I-1.1`, Full Access** |
 | `.ldf` files copied to `C:\Elprotronic\imd111t-ldf\` | **done** |
 | `flash-imd111t.bat` written to `C:\Elprotronic\` | **done** |
+| `FPAs-setup.ini` token corrected to `TYPE-IMOTION` | **done — was `TYPE-iMOTION`, caused ARM-DLL fallback** |
 | DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
-| Phase 3 manual test (`flash-imd111t.bat classb-en`) | pending — needs bench session |
+| Phase 3 manual test (`flash-imd111t.bat classb-en`) | **in progress** — first run hit the token bug; retest after server restart |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
