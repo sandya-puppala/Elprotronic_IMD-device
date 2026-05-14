@@ -297,9 +297,10 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 | `flash-imd111t.bat` written to `C:\Elprotronic\` | **done** |
 | `FPAs-setup.ini` token corrected to `TYPE-IMOTION` | **done — was `TYPE-iMOTION`, caused ARM-DLL fallback** |
 | DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
-| Phase 3a — program Class-B-**enabled** `.ldf` (`classb-en`) | **DONE — PASS, see §11** |
-| Phase 3b — reprogram a chip that already holds Class-B params | **in progress** — first try failed (no headless power-cycle); cfg fixed, retest pending |
-| `imd111t-cli.cfg` (prompts disabled) | **done** — batch file now points here |
+| Phase 3a — program Class-B-**enabled** `.ldf` (`classb-en`) | **DONE — PASS on a live chip via v1.04, see §11** |
+| Phase 3b — reprogram a chip that already holds Class-B params | **BLOCKED** — x64 bundle is v1.04, which has no recovery path; v1.05 is x86-only |
+| `imd111t-cli.cfg` (prompts disabled) | done — but not the cause; kept anyway, harmless |
+| **Switch to 32-bit Generic-FPA bundle + v1.05 win32 DLL** | **NEXT — run `C:\Elprotronic\Generic-FPA-DLL\Win32\setup.exe`** |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
 
 ## 11. Bench results log
@@ -391,3 +392,49 @@ inside `AutoProgram`, which means the cfg must let it run unattended.
 `PowerFromFpaEn` stays `1` — the FPA owns Vcc, so with the prompt disabled
 `AutoProgram` can power-cycle the target itself. `flash-imd111t.bat` now points
 `CFG` at `imd111t-cli.cfg`. Retest pending.
+
+### 2026-05-14 11:32 — `flash-imd111t.bat working` (cfg fix) — FAIL → version mismatch found
+
+Identical failure with the prompt-disabled cfg: 4× `115.2 kb/s`,
+`Communication initialization ......... failed`. `PromptForPowerCycle` was not
+the blocker. This forced a DLL-version audit, which found the real root cause.
+
+**The x64 Generic-FPA bundle ships iMOTION DLL v1.0.4.0. The working v1.05 GUI
+uses v1.0.5.0 — and v1.05 exists only as a 32-bit (x86) build.**
+
+| iMOTION DLL on this machine | Version | Bitness |
+|---|---|---|
+| `Generic-FPA-DLLs (x64)\bin\x64\FlashProiMOTION-FPA1.dll` (used so far) | 1.0.4.0 | x64 |
+| `Generic-FPA-DLLs (x64)\debug\x64\…` | 1.0.4.0 | x64 |
+| `Generic-FPA-DLLs (x64)\LabviewDemo…2019/2023\…` | 1.0.3.0 | x64 |
+| `iMOTION\API-DLL\bin\win32\FlashProiMOTION-FPA1.dll` (the working GUI's DLL) | **1.0.5.0** | **x86** |
+| `iMOTION\API-DLL\debug\win32\…` | 1.0.5.0 | x86 |
+
+The Class-B recovery sequence (power-cycle + SBSL catch-at-startup on a
+non-responsive chip) was added in **v1.05**. v1.04 can program a *live* chip
+(proved 11:14) but has no recovery path for a bricked one — exactly the
+observed behaviour. A 64-bit process cannot load a 32-bit DLL, so the x64
+Generic-FPA route is capped at v1.04 forever.
+
+**The fix path — switch to the 32-bit Generic-FPA bundle:**
+
+1. The 32-bit bundle is not installed yet. Its installer is on disk at
+   `C:\Elprotronic\Generic-FPA-DLL\Win32\` (`Generic-DLLs-for-Programmers-Setup.msi`
+   + `setup.exe`). Run `setup.exe` (needs admin).
+2. After install, the 32-bit `Generic-CommandLine-Server.exe` /
+   `CommandLine-Client.exe` / `Generic-FPA.DLL` land in that bundle's `bin\Win32`
+   (default install path may be under `C:\Elprotronic\` or `Program Files (x86)`).
+3. The 32-bit bundle will itself ship iMOTION v1.04 — **overwrite its
+   `FlashProiMOTION-FPA1.dll` with the v1.05 win32 DLL** from
+   `C:\Program Files (x86)\Elprotronic\iMOTION\API-DLL\bin\win32\FlashProiMOTION-FPA1.dll`.
+4. Re-create `FPAs-setup.ini` (`FPA-1 20220147 TYPE-IMOTION`) and re-point
+   `flash-imd111t.bat` at the 32-bit bundle's `bin\Win32`.
+5. Retest `flash-imd111t.bat working`. With v1.05 in the loop the comm-init
+   should drop to `57.6 kb/s` and recover the bricked chip.
+
+**Alternative to evaluate:** `FlashPro-iMOTION.exe` (the v1.05 GUI itself,
+`C:\Program Files (x86)\Elprotronic\iMOTION\FlashPro-iMOTION\`) may accept a
+`.sf` script or command-line args for headless operation — like `FlashPro-X`
+does with its `Scripts\*.sf`. If so, that drives v1.05 directly with no
+Generic-FPA layer at all. Worth checking before committing to the 32-bit
+bundle install.
