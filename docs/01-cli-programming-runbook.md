@@ -67,50 +67,42 @@ Server commands (case-insensitive) — confirmed via `sequence.txt` and the
 
 ## 3. One-time setup (~15 minutes)
 
-### 3.1 Discover FPA serial number
+### 3.1 FPA serial number — DONE
 
-In the **v1.05** FlashPro-iMOTION GUI → About / Adapter Info → note the XStream-Iso
-serial, e.g. `20183001`.
+XStream-Iso adapter serial: **`20220147`**.
 
-Or from PowerShell:
+### 3.2 `FPAs-setup.ini` — DONE
 
-```powershell
-Get-PnpDevice -Class USB | Where-Object { $_.FriendlyName -match "XStream|Elprotronic" } | Format-List FriendlyName, DeviceID
-```
-
-### 3.2 Write `FPAs-setup.ini`
-
-Edit `C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64\FPAs-setup.ini`. The shipped
-file has stale `TYPE-MSP` / `TYPE-ARM` lines — replace with a single line:
+`C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64\FPAs-setup.ini` now contains a
+single line (stale `TYPE-MSP` / `TYPE-ARM` lines removed):
 
 ```
-FPA-1 <YourSerialNumberHere> TYPE-iMOTION
+FPA-1 20220147 TYPE-iMOTION
 ```
 
-Example:
+### 3.3 Working `.cfg` — DONE
 
-```
-FPA-1 20183001 TYPE-iMOTION
-```
+`C:\Users\Sandhya\Desktop\MCE11.CFG`, exported from the v1.05 FlashPro-iMOTION GUI.
+Verified contents:
 
-### 3.3 Export the working `.cfg` from v1.05 GUI
+| Key | Value | Meaning |
+|---|---|---|
+| `MCU_name` | `IMD111T-6F040` | Correct target part |
+| `Interface` | `514` | UART interface |
+| `PowerFromFpaEn` | `1` | FPA sources Vcc — power cycle is automatic |
+| `PowerCycleVccOff` | `300` | Vcc held off 300 ms during power cycle |
+| `PowerCycleDelay` | `100` | 100 ms settle after Vcc returns |
+| `VccFromFPAin_mV` | `3300` | 3.3 V target rail |
+| `FlashEraseModeIndex` | `2` | Mass-erase mode |
+| `PromptForPowerCycle` | `1` | See note below |
 
-In **v1.05** FlashPro-iMOTION (the one that already works for you):
+> **Note on `PromptForPowerCycle 1`:** this only pops a dialog when the FPA does
+> *not* own Vcc. Here `PowerFromFpaEn=1`, so the adapter power-cycles the target
+> itself and the prompt is bypassed — matches the automatic behaviour you see in
+> the v1.05 GUI. If the server ever blocks waiting on a prompt, re-export the cfg
+> with `PromptForPowerCycle` set to `0`.
 
-1. Load a Working parameter `.ldf` (Class-B disabled).
-2. Confirm a clean Auto-Program cycle against the IMD111T.
-3. **File → Save Setup As…** → `C:\Elprotronic\IMD111T-working.cfg`.
-
-That `.cfg` captures everything the v1.04 API DLL needs:
-MCU=IMD111T-6F040, UART iface, baud, Vcc (`VccFromFPAin_mV`), `PowerFromFpaEn=1`,
-`PowerCycleDelay`, `PowerCycleVccOff`, reset timing. These drive the SBSL
-catch-at-startup window correctly on a Class-B-bricked chip.
-
-> The format is shown by `STM32H750VB-Issi-ext.cfg` in `bin\x64\` — plain
-> key/value text. Lines that matter for Class-B recovery: `PowerCycleVccOff 300`,
-> `PowerFromFpaEn 1`, `PromptForPowerCycle 1`, `VccFromFPAin_mV 3300`.
-
-### 3.4 Confirm DLL version
+### 3.4 Confirm DLL version — pending
 
 ```powershell
 (Get-Item "C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64\FlashProiMOTION-FPA1.dll").VersionInfo |
@@ -141,7 +133,7 @@ cd "C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64"
 #### Case 1 — chip is Class-B-bricked; flash a Working .ldf to recover comms
 
 ```powershell
-.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Elprotronic\IMD111T-working.cfg"
+.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Users\Sandhya\Desktop\MCE11.CFG"
 .\CommandLine-Client.exe -i 1 -m ReadCodeFile  "C:\Users\Sandhya\Downloads\IMD111T Demo test files\IMD111T Demo test files\IMD111T-F040_A_V5.03.00 Mainfirmware shared by infineon.ldf"
 .\CommandLine-Client.exe -i 1 -m Memory_Erase 0
 .\CommandLine-Client.exe -i 1 -m AutoProgram 0
@@ -159,7 +151,7 @@ Then load Working parameters:
 #### Case 2 — chip is alive; deliberately program Class-B-enabled production parameters
 
 ```powershell
-.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Elprotronic\IMD111T-working.cfg"
+.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Users\Sandhya\Desktop\MCE11.CFG"
 .\CommandLine-Client.exe -i 1 -m ReadCodeFile  "C:\Users\Sandhya\Downloads\IMD111T Demo test files\IMD111T Demo test files\Not_Working_ClassB_enabled_I2Cdisable.ldf"
 .\CommandLine-Client.exe -i 1 -m AutoProgram 0
 .\CommandLine-Client.exe -i 1 -m Report_Message
@@ -170,7 +162,7 @@ This is the file the v3.02 GUI fails on. v1.04 succeeds.
 #### Case 3 — re-program after Class-B parameters are loaded
 
 ```powershell
-.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Elprotronic\IMD111T-working.cfg"
+.\CommandLine-Client.exe -i 1 -m ConfigFileLoad "C:\Users\Sandhya\Desktop\MCE11.CFG"
 .\CommandLine-Client.exe -i 1 -m ReadCodeFile  "<path>\<new>.ldf"
 .\CommandLine-Client.exe -i 1 -m Memory_Erase 0
 .\CommandLine-Client.exe -i 1 -m AutoProgram 0
@@ -222,7 +214,7 @@ Step Report_Message
 Usage:
 
 ```powershell
-.\flash-imd111t.ps1 -Cfg C:\Elprotronic\IMD111T-working.cfg `
+.\flash-imd111t.ps1 -Cfg C:\Users\Sandhya\Desktop\MCE11.CFG `
                     -Ldf "C:\...\Not_Working_ClassB_enabled_I2Cdisable.ldf" `
                     -MassErase
 ```
@@ -265,7 +257,8 @@ If that still fails:
 |---|---|
 | Generic-FPA install tree present | confirmed |
 | v1.04 iMOTION API DLL in `bin\x64` | confirmed (May 13 2024, 16 MB) |
-| `FPAs-setup.ini` populated with our FPA serial | **pending — needs FPA serial** |
-| `IMD111T-working.cfg` exported from v1.05 GUI | **pending — needs bench session** |
-| Phase 3 manual test (Working → Not_Working → Working) | pending |
+| `FPAs-setup.ini` populated with FPA serial `20220147` | **done** |
+| Working `.cfg` (`C:\Users\Sandhya\Desktop\MCE11.CFG`) | **done — verified IMD111T-6F040, UART, FPA-powered** |
+| DLL `VersionInfo` check (§3.4) | pending — quick PowerShell one-liner |
+| Phase 3 manual test (Working → Not_Working → Working) | pending — needs bench session |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending |
