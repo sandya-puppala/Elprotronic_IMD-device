@@ -18,7 +18,10 @@ REM     flash-imd111t.bat "<full path to any .ldf>"  - program that file as-is
 REM ==========================================================================
 setlocal
 
-set BIN=C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64
+REM 32-bit bundle: the only Generic-FPA build that can load the x86-only
+REM iMOTION v1.05 DLL. Its FlashProiMOTION-FPA1.dll was swapped to v1.0.5.0
+REM (v1.04 original kept as FlashProiMOTION-FPA1.dll.v1.0.4.0.bak).
+set BIN=C:\Elprotronic\Generic-FPA-DLLs (x86)\bin\Win32
 REM imd111t-cli.cfg is MCE11.CFG with PromptForPowerCycle=0 and
 REM PromptForFirstPageErase_coreM0only=0 so AutoProgram power-cycles the
 REM target itself in headless mode (no dialog for the server to block on).

@@ -298,9 +298,11 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 | `FPAs-setup.ini` token corrected to `TYPE-IMOTION` | **done — was `TYPE-iMOTION`, caused ARM-DLL fallback** |
 | DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
 | Phase 3a — program Class-B-**enabled** `.ldf` (`classb-en`) | **DONE — PASS on a live chip via v1.04, see §11** |
-| Phase 3b — reprogram a chip that already holds Class-B params | **BLOCKED** — x64 bundle is v1.04, which has no recovery path; v1.05 is x86-only |
-| `imd111t-cli.cfg` (prompts disabled) | done — but not the cause; kept anyway, harmless |
-| **Switch to 32-bit Generic-FPA bundle + v1.05 win32 DLL** | **NEXT — run `C:\Elprotronic\Generic-FPA-DLL\Win32\setup.exe`** |
+| Phase 3b — reprogram a chip that already holds Class-B params | retest pending on the 32-bit / v1.05 bundle |
+| `imd111t-cli.cfg` (prompts disabled) | done — kept; harmless |
+| 32-bit Generic-FPA bundle installed | **done — `C:\Elprotronic\Generic-FPA-DLLs (x86)\`** |
+| v1.05 win32 DLL swapped into the 32-bit bundle | **done — `bin\Win32\FlashProiMOTION-FPA1.dll` now 1.0.5.0** |
+| `FPAs-setup.ini` + `flash-imd111t.bat` re-pointed at 32-bit bundle | **done** |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
 
 ## 11. Bench results log
@@ -438,3 +440,31 @@ Generic-FPA route is capped at v1.04 forever.
 does with its `Scripts\*.sf`. If so, that drives v1.05 directly with no
 Generic-FPA layer at all. Worth checking before committing to the 32-bit
 bundle install.
+
+### 2026-05-14 12:10 — 32-bit bundle installed, v1.05 DLL swapped in
+
+- 32-bit Generic-FPA bundle installed to `C:\Elprotronic\Generic-FPA-DLLs (x86)\`.
+  CLI tools live in `bin\Win32\` (`Generic-CommandLine-Server.exe`,
+  `CommandLine-Client.exe`, `Generic-FPA.dll`).
+- Bundle shipped iMOTION DLL v1.0.4.0. Backed it up as
+  `FlashProiMOTION-FPA1.dll.v1.0.4.0.bak` and copied the v1.05 win32 DLL
+  (`…\iMOTION\API-DLL\bin\win32\FlashProiMOTION-FPA1.dll`, 1.0.5.0) over it.
+  This is the procedure the bundle's own `README.txt` prescribes ("copy the
+  appropriate API-DLL with the newer version … to here").
+- `bin\Win32\FPAs-setup.ini` set to `FPA-1 20220147 TYPE-IMOTION`.
+- `flash-imd111t.bat` `BIN` re-pointed to `…(x86)\bin\Win32`.
+
+**Retest procedure** (the chip still holds Class-B params from the 11:14 run):
+
+Console A — start the **32-bit** server:
+```
+cd "C:\Elprotronic\Generic-FPA-DLLs (x86)\bin\Win32"
+Generic-CommandLine-Server.exe FPAs-setup.ini -b
+```
+Console B:
+```
+C:\Elprotronic\flash-imd111t.bat working
+```
+Pass criteria: comm-init drops to `57.6 kb/s`, `Communication initialization …
+OK`, erase + program succeed. That is the v1.05 Class-B recovery sequence
+working through the CLI route.
