@@ -92,8 +92,16 @@ FPA-1 20220147 TYPE-IMOTION
 
 ### 3.3 Working `.cfg` — DONE
 
-`C:\Users\Sandhya\Desktop\MCE11.CFG`, exported from the v1.05 FlashPro-iMOTION GUI.
-Verified contents:
+Two files:
+
+- **`C:\Users\Sandhya\Desktop\MCE11.CFG`** — exported as-is from the v1.05
+  FlashPro-iMOTION GUI. Reference / source of truth.
+- **`C:\Elprotronic\imd111t-cli.cfg`** — the one the batch file actually uses.
+  Identical to `MCE11.CFG` except `PromptForPowerCycle` and
+  `PromptForFirstPageErase_coreM0only` are set to `0` so `AutoProgram` runs
+  fully unattended (see §11, 11:21 entry, for why).
+
+Verified `MCE11.CFG` contents:
 
 | Key | Value | Meaning |
 |---|---|---|
@@ -290,7 +298,8 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 | `FPAs-setup.ini` token corrected to `TYPE-IMOTION` | **done — was `TYPE-iMOTION`, caused ARM-DLL fallback** |
 | DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
 | Phase 3a — program Class-B-**enabled** `.ldf` (`classb-en`) | **DONE — PASS, see §11** |
-| Phase 3b — reprogram a chip that already holds Class-B params | pending — run `flash-imd111t.bat working` next |
+| Phase 3b — reprogram a chip that already holds Class-B params | **in progress** — first try failed (no headless power-cycle); cfg fixed, retest pending |
+| `imd111t-cli.cfg` (prompts disabled) | **done** — batch file now points here |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
 
 ## 11. Bench results log
@@ -333,3 +342,52 @@ chip that already holds Class-B-enabled params*. The chip is now in exactly that
 state, so the next run — `flash-imd111t.bat working` — is the real recovery
 test: it must establish comms with the Class-B-loaded chip, mass-erase, and
 program the Working params.
+
+### 2026-05-14 11:21 — `flash-imd111t.bat working` — FAIL → cfg fix applied
+
+With the chip now holding Class-B-enabled params from the 11:14 run (i.e. the
+real bricked state), the recovery run failed:
+
+| Step | `RETURN:` |
+|---|---|
+| `ConfigFileLoad` | `1` |
+| `Memory_Erase 0` | `0` (failed, ~24 s) |
+| `ReadCodeFile …\Working_ClassB_disabled_I2Cdisable.ldf` | `1` |
+| `AutoProgram 0` | `0` (failed, ~23 s) |
+| `Report_Message` | FAILED |
+
+`Report_Message` output:
+
+```
+MCE UART speed (  115.2 kb/s).
+MCE UART speed (  115.2 kb/s).
+MCE UART speed (  115.2 kb/s).
+MCE UART speed (  115.2 kb/s).
+Communication initialization.........    failed
+ --------------- FAILED !!! -----------------
+```
+
+**Diagnosis.** Four retries at the running-app baud (115.2 kb/s), never
+dropping to the 57.6 kb/s SBSL catch-at-startup baud. The chip's MCE app is in
+the Class-B safe-fault loop, so nothing answers at 115.2 — `AutoProgram` needs
+to **power-cycle the target and catch the SBSL at startup**, and it didn't.
+
+Root cause: `MCE11.CFG` has `PromptForPowerCycle 1`. In the v1.05 GUI a human
+acknowledges that dialog; headless, the server can't show it, so `AutoProgram`
+never performs the power cycle and just exhausts its running-app retries.
+
+A separate `Power_Target 0/1` CLI command pair can't substitute — the SBSL
+catch-at-startup window is only ~100 ms after power-on, far shorter than the
+client/pipe round-trip between CLI calls. The power cycle **must** happen
+inside `AutoProgram`, which means the cfg must let it run unattended.
+
+**Fix applied.** `C:\Elprotronic\imd111t-cli.cfg` — a copy of `MCE11.CFG` with:
+
+| Key | `MCE11.CFG` | `imd111t-cli.cfg` |
+|---|---|---|
+| `PromptForPowerCycle` | `1` | `0` |
+| `PromptForFirstPageErase_coreM0only` | `1` | `0` |
+
+`PowerFromFpaEn` stays `1` — the FPA owns Vcc, so with the prompt disabled
+`AutoProgram` can power-cycle the target itself. `flash-imd111t.bat` now points
+`CFG` at `imd111t-cli.cfg`. Retest pending.

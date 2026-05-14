@@ -19,7 +19,10 @@ REM ==========================================================================
 setlocal
 
 set BIN=C:\Elprotronic\Generic-FPA-DLLs (x64)\bin\x64
-set CFG=C:\Users\Sandhya\Desktop\MCE11.CFG
+REM imd111t-cli.cfg is MCE11.CFG with PromptForPowerCycle=0 and
+REM PromptForFirstPageErase_coreM0only=0 so AutoProgram power-cycles the
+REM target itself in headless mode (no dialog for the server to block on).
+set CFG=C:\Elprotronic\imd111t-cli.cfg
 set LDFDIR=C:\Elprotronic\imd111t-ldf
 set CLIENT=CommandLine-Client.exe
 
