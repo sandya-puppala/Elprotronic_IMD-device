@@ -289,5 +289,47 @@ the `RETURN:` token out of stdout** rather than checking `errorlevel`.
 | `flash-imd111t.bat` written to `C:\Elprotronic\` | **done** |
 | `FPAs-setup.ini` token corrected to `TYPE-IMOTION` | **done — was `TYPE-iMOTION`, caused ARM-DLL fallback** |
 | DLL `VersionInfo` check (§3.4) | pending — run the PowerShell one-liner *in PowerShell, not cmd* |
-| Phase 3 manual test (`flash-imd111t.bat classb-en`) | **in progress** — first run hit the token bug; retest after server restart |
+| Phase 3a — program Class-B-**enabled** `.ldf` (`classb-en`) | **DONE — PASS, see §11** |
+| Phase 3b — reprogram a chip that already holds Class-B params | pending — run `flash-imd111t.bat working` next |
 | Phase 4 `elprotronic-fpa` backend in `flash-mce.py` | pending — must parse `RETURN:` from stdout, not exit code |
+
+## 11. Bench results log
+
+### 2026-05-14 11:14 — `flash-imd111t.bat classb-en` — PASS
+
+First successful CLI programming run. After correcting the `FPAs-setup.ini`
+token to `TYPE-IMOTION` and restarting the server:
+
+| Step | `RETURN:` |
+|---|---|
+| `ConfigFileLoad C:\Users\Sandhya\Desktop\MCE11.CFG` | `1` |
+| `ReadCodeFile …\Not_Working_ClassB_enabled_I2Cdisable.ldf` | `1` |
+| `AutoProgram 0` | `1` (6.4 s) |
+| `Report_Message` | PASS |
+
+`Report_Message` output:
+
+```
+MCE UART speed (  115.2 kb/s).
+MCE UART communication - CONF (115.2 kb/s).
+Communication initialization.........    OK
+Erasing memory ...............................   done
+Flash programming .................
+MCE UART speed (   57.6 kb/s).
+MCE UART speed ( 2100.0 kb/s).
+MCE UART speed (  115.2 kb/s).
+...      OK
+ -------- D O N E --- ( run time =   6.4 sec.)
+```
+
+**Significance:** the Class-B-enabled parameter file — the exact file the v3.02
+unified GUI cannot program — went through cleanly via the Generic-FPA CLI route
+on the v1.04 iMOTION DLL. The 115.2 → 57.6 → 2100 → 115.2 kb/s baud sequence is
+the SBSL catch-at-startup / auto-baud handshake working as it does under the
+v1.05 GUI. Option C is validated for *programming* Class-B params.
+
+**Still to confirm (Phase 3b):** the original pain point is *reprogramming a
+chip that already holds Class-B-enabled params*. The chip is now in exactly that
+state, so the next run — `flash-imd111t.bat working` — is the real recovery
+test: it must establish comms with the Class-B-loaded chip, mass-erase, and
+program the Working params.
